@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from sklearn import metrics
 
 class Evaluator(object):
     def __init__(self, y, t, y_cf=None, mu0=None, mu1=None):
@@ -40,6 +41,42 @@ class Evaluator(object):
         ate = self.abs_ate(ypred1, ypred0)
         pehe = self.pehe(ypred1, ypred0)
         return ite, ate, pehe
+
+    # from CIB research
+    def auc(self, ypred1, ypred0):
+        y_label = np.concatenate((self.mu0, self.mu1), axis=0)
+        y_label_pred = np.concatenate((ypred0, ypred1), axis=0)
+        fpr, tpr, thresholds = metrics.roc_curve(y_label, y_label_pred)
+        auc = metrics.auc(fpr, tpr)
+        roc_auc = metrics.roc_auc_score(y_label, y_label_pred)
+        # yf = self.y
+        # fact_fpr, fact_tpr, fact_thresholds = metrics.roc_curve(yf, yf_p)
+        # fact_auc = metrics.auc(fpr, tpr)
+        # fact_roc_auc = roc_auc_score(yf, yf_p)
+        return {'auc': auc,'roc_auc':roc_auc}#, 'fact_auc':fact_auc,'fact_roc_auc':fact_roc_auc }
+
+    def policy(self, pred_y_1, pred_y_0):
+        e = self.e
+
+        yf = self.y[e==1]
+        t = self.t
+
+        pred_policy = (pred_y_1 > pred_y_0).astype(float)
+        pred_policy_t = np.mean(pred_policy)
+        pred_policy_c = 1 - pred_policy_t
+        if np.sum((pred_policy==1) * (t_true==1)) == 0:
+            pred_y_t = 0.
+        else:
+            pred_y_t = np.mean(y_true[(pred_policy==1) * (t_true==1)])
+
+        if np.sum((pred_policy==0) * (t_true==0)) == 0:
+            pred_y_c = 0.
+        else:
+            pred_y_c = np.mean(y_true[(pred_policy==0) * (t_true==0)])
+
+        risk = 1 - (pred_y_t*pred_policy_t + pred_y_c*pred_policy_c)
+
+        return risk
 
 
 def get_y0_y1(p_y_zt_dist, q_y_xt_dist, q_z_tyx_dist, x_train, t_train, L=1):

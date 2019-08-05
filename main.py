@@ -1,5 +1,5 @@
 """
-## CEVAE on IHDP - python3, PyTorch
+## CEVAE - python3, PyTorch
 
 # by Rik Helwegen
 # MSc AI - thesis, University of Amsterdam
@@ -12,7 +12,7 @@ https://github.com/AMLab-Amsterdam/CEVAE/blob/master/cevae_ihdp.py
 from argparse import ArgumentParser
 
 from initialisation import init_qz
-from datasets import IHDP
+from datasets import IHDP, TWINS, JOBS
 from evaluation import Evaluator, get_y0_y1
 from networks import p_x_z, p_t_z, p_y_zt, q_t_x, q_y_xt, q_z_tyx
 
@@ -25,8 +25,8 @@ from torch.distributions import normal
 from torch import optim
 
 # set random seeds:
-# torch.manual_seed(7)
-# np.random.seed(7)
+np.random.seed(2019)
+torch.manual_seed(2019)
 
 parser = ArgumentParser()
 
@@ -39,10 +39,18 @@ parser.add_argument('-batch', type=int, default=100)
 parser.add_argument('-lr', type=float, default=0.00001)
 parser.add_argument('-decay', type=float, default=0.001)
 parser.add_argument('-print_every', type=int, default=10)
+# new from CIB research
+parser.add_argument('--data-type', type=str, default='IHDP')
 
 args = parser.parse_args()
-
-dataset = IHDP(replications=args.reps)
+if args.data_type == 'IHDP':
+    dataset = IHDP(replications=args.reps)
+elif args.data_type == 'TWINS':
+    dataset = TWINS(replications=args.reps)
+elif args.data_type == 'JOBS':
+    dataset = JOBS(replications=args.reps)
+else:
+    raise ValueError("Invalid dataset")
 
 # Loop for replications
 for i, (train, valid, test, contfeats, binfeats) in enumerate(dataset.get_train_valid_test()):
@@ -110,7 +118,8 @@ for i, (train, valid, test, contfeats, binfeats) in enumerate(dataset.get_train_
         for j in range(n_iter_per_epoch):
             # select random batch
             batch = np.random.choice(idx, M)
-            x_train, y_train, t_train = torch.cuda.FloatTensor(xalltr[batch]), torch.cuda.FloatTensor(yalltr[batch]), \
+            x_train, y_train, t_train = torch.cuda.FloatTensor(xalltr[batch]), \
+                                        torch.cuda.FloatTensor(yalltr[batch]), \
                                         torch.cuda.FloatTensor(talltr[batch])
 
             # inferred distribution over z
@@ -179,14 +188,15 @@ for i, (train, valid, test, contfeats, binfeats) in enumerate(dataset.get_train_
                                torch.tensor(tte).cuda())
             y0, y1 = y0 * ys + ym, y1 * ys + ym
             score_test = evaluator_test.calc_stats(y1, y0)
-            print('Testset - ite: %f, ate: %f, pehe: %f' % score_test)
+            print('Test set - ite: %f, ate: %f, pehe: %f' % score_test)
 
-    plt.figure()
+    fig1 = plt.figure()
     plt.plot(np.array(loss['Total']), label='Total')
     plt.title('Variational Lower Bound')
     plt.show()
+    fig1.savefig(f'results/{args.data_type}_total.png', format="png")
 
-    plt.figure()
+    fig2 = plt.figure()
     subidx = 1
     for key, value in loss.items():
         plt.subplot(2, 4, subidx)
@@ -194,3 +204,4 @@ for i, (train, valid, test, contfeats, binfeats) in enumerate(dataset.get_train_
         plt.title(key)
         subidx += 1
     plt.show()
+    fig2.savefig(f'results/{args.data_type}_detail.png', format="png")
